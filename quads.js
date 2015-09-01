@@ -81,39 +81,65 @@ IntegralImage.prototype.avg = function(dx, dy, dw, dh) {
     return avgRGB;
 };
 
+function Queue() {
+    this.enter = [];
+    this.leave = [];
+}
+Queue.prototype.enqueue = function(item) {
+    this.enter.push(item);
+};
+Queue.prototype.dequeue = function() {
+    if (this.leave.length === 0) {
+        while (this.enter.length > 0) {
+            this.leave.push(this.enter.pop());
+        }
+    }
+    return this.leave.pop();
+};
+Object.defineProperty(Queue.prototype, 'length', {
+    get: function() {return this.enter.length + this.leave.length;}
+});
+
 var draw;
 var n;
-var stack;
+var queue;
 var start;
-var nps = 50000;
+var prevTimestamp;
+var npms = 5;
+var depthPerSec = 1;
+var intervals = [];
 function begin() {
     var orig = context.getImageData(0, 0, canvas.width, canvas.height);
     var integralImage = new IntegralImage(orig);
     start = null;
     n = 0;
-    stack = [];
-    stack.push(new AreaNode(0, 0, canvas.width, canvas.height, 0));
+    queue = new Queue();
+    queue.enqueue(new AreaNode(0, 0, canvas.width, canvas.height, 0));
     draw = function draw(timestamp) {
-        if (stack.length == 0) {
+        if (queue.length == 0) {
             var actualNps = (n / (timestamp - start)) * 1000;
             console.log(actualNps);
             return;
         }
 
-        if (!start) start = timestamp;
-        var progress = timestamp - start;
-        while (n < progress * nps / 1000 && stack.length > 0) {
-            var a = stack.pop();
+        var interval = timestamp - prevTimestamp;
+        intervals.push(interval);
+        prevTimestamp = timestamp;
+
+        for (var i = 0; i < interval * npms && queue.length > 0; i++) {
+            var a = queue.dequeue();
             var avgRGB = integralImage.avg(a.dx, a.dy, a.dw, a.dh);
             context.fillStyle = 'rgb(' + avgRGB.join(',') + ')';
             context.fillRect(a.dx, a.dy, a.dw, a.dh);
             a.children().forEach(function (a) {
-                stack.push(a);
+                queue.enqueue(a);
             });
             n += 1;
         }
         requestAnimationFrame(draw);
     };
+    prevTimestamp = start = performance.now();
+    requestAnimationFrame(draw);
 }
 
 function readImage() {
@@ -140,6 +166,5 @@ img.addEventListener('load', function(e) {
     canvas.width = img.width;
     canvas.height = img.height;
     context.drawImage(img, 0, 0);
-    begin();
 });
 img.src = 'image.png';
