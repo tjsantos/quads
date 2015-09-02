@@ -82,22 +82,34 @@ IntegralImage.prototype.avg = function(dx, dy, dw, dh) {
 };
 
 function Queue() {
+    // two stack implementation
     this.enter = [];
-    this.leave = [];
+    this.exit = [];
 }
 Queue.prototype.enqueue = function(item) {
     this.enter.push(item);
 };
-Queue.prototype.dequeue = function() {
-    if (this.leave.length === 0) {
-        while (this.enter.length > 0) {
-            this.leave.push(this.enter.pop());
-        }
+Queue.prototype._prepExit = function() {
+    if (this.exit.length > 0) return;
+
+    while (this.enter.length > 0) {
+        this.exit.push(this.enter.pop());
     }
-    return this.leave.pop();
+};
+Queue.prototype.dequeue = function() {
+    if (this.length === 0) throw new Error('queue is empty');
+
+    this._prepExit();
+    return this.exit.pop();
+};
+Queue.prototype.peek = function() {
+    if (this.length === 0) throw new Error('queue is empty');
+
+    this._prepExit();
+    return this.exit[this.exit.length - 1];
 };
 Object.defineProperty(Queue.prototype, 'length', {
-    get: function() {return this.enter.length + this.leave.length;}
+    get: function() {return this.enter.length + this.exit.length;}
 });
 
 var draw;
@@ -125,16 +137,19 @@ function begin() {
         var interval = timestamp - prevTimestamp;
         intervals.push(interval);
         prevTimestamp = timestamp;
-
-        for (var i = 0; i < interval * npms && queue.length > 0; i++) {
-            var a = queue.dequeue();
-            var avgRGB = integralImage.avg(a.dx, a.dy, a.dw, a.dh);
-            context.fillStyle = 'rgb(' + avgRGB.join(',') + ')';
-            context.fillRect(a.dx, a.dy, a.dw, a.dh);
-            a.children().forEach(function (a) {
-                queue.enqueue(a);
-            });
-            n += 1;
+        var depth = queue.peek().depth;
+        if ((timestamp - start)*depthPerSec/1000 >= depth) {
+            //for (var i = 0; i < interval * npms && queue.length > 0; i++) {
+            while (queue.length && queue.peek().depth === depth) {
+                var a = queue.dequeue();
+                var avgRGB = integralImage.avg(a.dx, a.dy, a.dw, a.dh);
+                context.fillStyle = 'rgb(' + avgRGB.join(',') + ')';
+                context.fillRect(a.dx, a.dy, a.dw, a.dh);
+                a.children().forEach(function (a) {
+                    queue.enqueue(a);
+                });
+                n += 1;
+            }
         }
         requestAnimationFrame(draw);
     };
