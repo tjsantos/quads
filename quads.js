@@ -120,10 +120,10 @@ var prevTimestamp;
 var npms = 5;
 var depthPerSec = 1;
 var intervals = [];
+var nodes = [];
 function begin() {
     var orig = context.getImageData(0, 0, canvas.width, canvas.height);
     var integralImage = new IntegralImage(orig);
-    start = null;
     n = 0;
     queue = new Queue();
     queue.enqueue(new AreaNode(0, 0, canvas.width, canvas.height, 0));
@@ -157,29 +157,24 @@ function begin() {
     requestAnimationFrame(draw);
 }
 
+
+function imageToCanvas() {
+    console.log('drawing image to canvas...');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    context.drawImage(img, 0, 0);
+}
+var img = new Image();
+img.addEventListener('load', imageToCanvas);
+img.src = 'image.png';  // default image
+
 function readImage() {
     var file = this.files[0];
     var reader = new FileReader();
     reader.addEventListener('load', function(e) {
-        var img = new Image();
-        img.addEventListener('load', function(e) {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            context.drawImage(img, 0, 0);
-            begin();
-        });
         img.src = e.target.result;
     });
     reader.readAsDataURL(file);
 }
 var input = document.querySelector('#fileInput');
 input.addEventListener('change', readImage);
-
-// default image
-var img = new Image();
-img.addEventListener('load', function(e) {
-    canvas.width = img.width;
-    canvas.height = img.height;
-    context.drawImage(img, 0, 0);
-});
-img.src = 'image.png';
