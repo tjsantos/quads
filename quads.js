@@ -18,6 +18,7 @@ function AreaNode(dx, dy, dw, dh, depth) {
     this.depth = depth;
     this.meanRGB = integralImage.meanRGB(dx, dy, dw, dh);
     this.varRGB = integralImage.varRGB(dx, dy, dw, dh);
+    this.sumSquaredError = dw * dh * this.varRGB.reduce(function(a, b) { return a + b; });
 }
 AreaNode.prototype.children = function() {
     if (!this._children) {
@@ -102,27 +103,108 @@ IntegralImage.prototype.varRGB = function(dx, dy, dw, dh) {
     return result;
 };
 
+function Heapq(cmp) {
+    if (typeof cmp !== 'function') {
+        throw new TypeError('expected comparison function');
+    }
+
+    this.cmp = cmp;
+}
+Heapq.prototype.heapify = function(arr) {
+    var n = arr.length;
+    for (var i = n - 1; i >= 0; i--) {
+        this._bubbleDown(arr, i);
+    }
+};
+Heapq.prototype.heappush = function(heap, item) {
+    heap.push(item);
+    this._bubbleUp(heap, heap.length - 1);
+};
+Heapq.prototype.heappop = function(heap) {
+    if (heap.length === 0) {
+        throw new Error('heap is empty');
+    }
+
+    var result = heap[0];
+    heap[0] = heap[heap.length - 1];
+    heap.pop();
+    this._bubbleDown(heap, 0);
+
+    return result;
+};
+Heapq.prototype._bubbleUp = function(heap, i) {
+    var parent = Math.floor((i - 1)/2);
+    while (parent >= 0 && this.cmp(heap[i], heap[parent]) < 0) {
+        var tmp = heap[parent];
+        heap[parent] = heap[i];
+        heap[i] = tmp;
+        i = parent;
+        parent = Math.floor((i - 1)/2);
+    }
+};
+Heapq.prototype._bubbleDown = function(heap, i) {
+    var n = heap.length;
+    while (true) {
+        // determine minimum element among current (i) and two children
+        var min = i;
+        var left = 2 * i + 1;
+        var right = 2 * i + 2;
+        if (left < n && this.cmp(heap[left], heap[min]) < 0) {
+            min = left;
+        }
+        if (right < n && this.cmp(heap[right], heap[min]) < 0) {
+            min = right;
+        }
+
+        // until heap invariant restored, swap current with min and continue bubble down
+        if (min === i) {
+            break;
+        } else {
+            var tmp = heap[i];
+            heap[i] = heap[min];
+            heap[min] = tmp;
+            i = min;
+        }
+    }
+};
+
 var draw;
 var n;
+var maxIters = Number.POSITIVE_INFINITY;
 var start;
 var prevTimestamp;
-var npms = 5;
+var nps = 100;
 var depthPerSec = 1;
 var intervals = [];
-var nodes;
-var threshold = 5000;
+var nodeOrder;
 var orig;
 var integralImage;
+var layered = false;
 function begin() {
     orig = context.getImageData(0, 0, canvas.width, canvas.height);
     integralImage = new IntegralImage(orig);
     n = 0;
-    nodes = [new AreaNode(0, 0, canvas.width, canvas.height, 0)];
+    var nodes = [new AreaNode(0, 0, canvas.width, canvas.height, 0)];
+    // priority queue by largest variance
+    var heapq = new Heapq(function(a, b) { return b.sumSquaredError - a.sumSquaredError; });
+    // pre-process node drawing order
+    nodeOrder = [];
+    for (var i = 0; i < maxIters; i++) {
+        if (nodes.length === 0) break;
+
+        var node = heapq.heappop(nodes);
+        nodeOrder.push(node);
+        node.children().forEach(function(x) { heapq.heappush(nodes, x); });
+    }
+
+    // if draw by depth
+    if (layered) {
+        nodeOrder.sort(function(a, b) { return a.depth - b.depth; });
+    }
 
     draw = function draw(timestamp) {
-        if (n === nodes.length) {
-            var actualNps = (n / (timestamp - start)) * 1000;
-            console.log(actualNps);
+        if (n === nodeOrder.length) {
+            console.log('done', timestamp - start);
             return;
         }
 
@@ -130,25 +212,34 @@ function begin() {
         intervals.push(interval);
         prevTimestamp = timestamp;
 
-        // draw nodes by depth
-        var currentDepth = nodes[n].depth;
-        if ((timestamp - start)*depthPerSec/1000 >= currentDepth) {
-            while (n < nodes.length && nodes[n].depth === currentDepth) {
-                var node = nodes[n];
-                var nodeVarTotal = node.varRGB.reduce(function(a, b) { return a + b; });
-                if (nodeVarTotal > threshold) {
-                    node.children().forEach(function (a) {
-                        context.fillStyle = 'rgb(' + a.meanRGB.join(',') + ')';
-                        context.fillRect(a.dx, a.dy, a.dw, a.dh);
-                        nodes.push(a);
-                    });
+        var stopIndex = n;
+        if (layered) {
+            // draw nodes by depth
+            var currentDepth = nodeOrder[n].depth;
+            if ((timestamp - start)*depthPerSec/1000 >= currentDepth) {
+                while (stopIndex < nodeOrder.length
+                        && nodeOrder[stopIndex].depth === currentDepth) {
+                    stopIndex += 1;
                 }
-                n += 1;
             }
+        } else {
+            stopIndex = Math.floor(nps*(timestamp - start)/1000);
+            stopIndex = Math.min(stopIndex, nodeOrder.length);
+        }
+
+        while (n < stopIndex) {
+            var node = nodeOrder[n];
+            node.children().forEach(function (a) {
+                context.fillStyle = 'rgb(' + a.meanRGB.join(',') + ')';
+                context.fillRect(a.dx, a.dy, a.dw, a.dh);
+                context.strokeRect(a.dx, a.dy, a.dw, a.dh);
+            });
+            n += 1;
         }
 
         requestAnimationFrame(draw);
     };
+    console.log('drawing...');
     prevTimestamp = start = performance.now();
     requestAnimationFrame(draw);
 }
@@ -175,6 +266,7 @@ var input = document.querySelector('#fileInput');
 input.addEventListener('change', readImage);
 
 function timeFillRect(r, g, b) {
+    // to test drawing speed
     var start = performance.now();
     var id = context.createImageData(1, 1);
     var d = id.data;
