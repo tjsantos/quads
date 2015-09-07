@@ -10,47 +10,21 @@ if (document.readyState != 'loading') {
 var canvas = document.querySelector('#canvas');
 var context = canvas.getContext('2d');
 
-function AreaNode(dx, dy, dw, dh, depth) {
+function Quad(dx, dy, dw, dh, depth) {
     this.dx = dx;
     this.dy = dy;
     this.dw = dw;
     this.dh = dh;
     this.depth = depth;
+    this.isLeaf = (this.dw <= 2 || this.dh <= 2);
     this.meanRGB = integralImage.meanRGB(dx, dy, dw, dh);
-    this.varRGB = integralImage.varRGB(dx, dy, dw, dh);
-    this.sumSquaredError = dw * dh * this.varRGB.reduce(function(a, b) { return a + b; });
+    var varRGB = integralImage.varRGB(dx, dy, dw, dh);
+    this.priority = dw * dh * varRGB.reduce(function(a, b) { return a + b; });
 }
-AreaNode.prototype.children = function() {
-    if (!this._children) {
-        if (this.dw == 1 && this.dh == 1) {
-            this._children = [];
-        } else {
-            // split into up to 4 quadrants with dimensions:
-            // w1 x h1 | w2 x h1
-            // w1 x h2 | w2 x h2
-            // w1 or h1 may be zero
-            var w1 = Math.floor(this.dw / 2);
-            var w2 = this.dw - w1;
-            var h1 = Math.floor(this.dh / 2);
-            var h2 = this.dh - h1;
-            var newDepth = this.depth + 1;
-            var children = [];
-            // top left, top right, bottom left, bottom right
-            if (w1 > 0 && h1 > 0) {
-                children.push(new AreaNode(this.dx, this.dy, w1, h1, newDepth));
-            }
-            if (h1 > 0) {
-                children.push(new AreaNode(this.dx + w1, this.dy, w2, h1, newDepth));
-            }
-            if (w1 > 0) {
-                children.push(new AreaNode(this.dx, this.dy + h1, w1, h2, newDepth));
-            }
-            children.push(new AreaNode(this.dx + w1, this.dy + h1, w2, h2, newDepth));
-            this._children = children;
-        }
-    }
-
-    return this._children;
+Quad.prototype.draw = function() {
+    context.fillStyle = 'rgb(' + a.meanRGB.join(',') + ')';
+    context.fillRect(a.dx, a.dy, a.dw, a.dh);
+    context.strokeRect(a.dx, a.dy, a.dw, a.dh);
 };
 
 function IntegralImage(imageData) {
@@ -168,90 +142,106 @@ Heapq.prototype._bubbleDown = function(heap, i) {
     }
 };
 
-var draw;
-var n;
-var maxIters = Number.POSITIVE_INFINITY;
-var start;
-var prevTimestamp;
-var nps = 100;
-var depthPerSec = 1;
-var intervals = [];
-var nodeOrder;
-var orig;
+var heapq = new Heapq(function cmp(a, b) {
+    // leaves have least priority
+    if (a.isLeaf) return (b.isLeaf ? 0 : 1);
+    else if (b.isLeaf) return (a.isLeaf ? 0 : -1);
+    else return (b.priority - a.priority);
+}, function key(item) {
+    return item.id;
+});
+
+var maxIters = 10000;
+var prevDraw;
+var itersPerSec = 10;
+var timestamps = [];  // to debug slow frames
 var integralImage;
-var layered = false;
-function begin() {
-    orig = context.getImageData(0, 0, canvas.width, canvas.height);
-    integralImage = new IntegralImage(orig);
-    n = 0;
-    var nodes = [new AreaNode(0, 0, canvas.width, canvas.height, 0)];
-    // priority queue by largest variance
-    var heapq = new Heapq(function(a, b) { return b.sumSquaredError - a.sumSquaredError; });
-    // pre-process node drawing order
-    nodeOrder = [];
-    for (var i = 0; i < maxIters; i++) {
-        if (nodes.length === 0) break;
+var quadHeap;
+var frameId;
+var toDraw = [];
+var id = 0;
 
-        var node = heapq.heappop(nodes);
-        nodeOrder.push(node);
-        node.children().forEach(function(x) { heapq.heappush(nodes, x); });
+function split(quad) {
+    if (quad.isLeaf) {
+        throw new TypeError('quad is a leaf -- cannot split');
     }
+    heapq.heappop(quadHeap, quad.heapIndex);
+    var w1 = Math.ceil(quad.dw / 2);
+    var w2 = quad.dw - w1;
+    var h1 = Math.ceil(quad.dh / 2);
+    var h2 = quad.dh - h1;
+    var newDepth = quad.depth + 1;
+    var children = [
+        new Quad(     quad.dx,      quad.dy, w1, h1, newDepth),
+        new Quad(quad.dx + w1,      quad.dy, w2, h1, newDepth),
+        new Quad(     quad.dx, quad.dy + h1, w1, h2, newDepth),
+        new Quad(quad.dx + w1, quad.dy + h1, w2, h2, newDepth)
+    ];
 
-    // if draw by depth
-    if (layered) {
-        nodeOrder.sort(function(a, b) { return a.depth - b.depth; });
-    }
-
-    draw = function draw(timestamp) {
-        if (n === nodeOrder.length) {
-            console.log('done', timestamp - start);
-            return;
-        }
-
-        var interval = timestamp - prevTimestamp;
-        intervals.push(interval);
-        prevTimestamp = timestamp;
-
-        var stopIndex = n;
-        if (layered) {
-            // draw nodes by depth
-            var currentDepth = nodeOrder[n].depth;
-            if ((timestamp - start)*depthPerSec/1000 >= currentDepth) {
-                while (stopIndex < nodeOrder.length
-                        && nodeOrder[stopIndex].depth === currentDepth) {
-                    stopIndex += 1;
-                }
-            }
-        } else {
-            stopIndex = Math.floor(nps*(timestamp - start)/1000);
-            stopIndex = Math.min(stopIndex, nodeOrder.length);
-        }
-
-        while (n < stopIndex) {
-            var node = nodeOrder[n];
-            node.children().forEach(function (a) {
-                context.fillStyle = 'rgb(' + a.meanRGB.join(',') + ')';
-                context.fillRect(a.dx, a.dy, a.dw, a.dh);
-                context.strokeRect(a.dx, a.dy, a.dw, a.dh);
-            });
-            n += 1;
-        }
-
-        requestAnimationFrame(draw);
-    };
-    console.log('drawing...');
-    prevTimestamp = start = performance.now();
-    requestAnimationFrame(draw);
+    children.forEach(function(quad) {
+        toDraw.push(quad);
+        heapq.heappush(quadHeap, quad);
+    });
 }
 
+function render() {
+    toDraw.forEach(function(quad) {
+        quad.draw();
+    });
+    toDraw = [];
+}
 
-function imageToCanvas() {
+function animate(timestamp) {
+    if (quadHeap[0].isLeaf) {
+        return;
+    }
+    timestamps.push(timestamp);
+    var iters = itersPerSec*(timestamp - prevDraw)/1000;
+    if (iters >= 1) {
+        prevDraw = timestamp;
+        for (var i = 0; i < iters; i++) {
+            split(quadHeap[0]);
+        }
+        render();
+    }
+
+    frameId = requestAnimationFrame(animate);
+}
+
+function reset() {
+    pause();
     canvas.width = img.width;
     canvas.height = img.height;
     context.drawImage(img, 0, 0);
+    quadHeap = [new Quad(0, 0, canvas.width, canvas.height, 0)];
+    var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    integralImage = new IntegralImage(imageData);
 }
+
+function pause() {
+    if (!frameId) {
+        return;
+    }
+    cancelAnimationFrame(frameId);
+    frameId = null;
+    prevDraw = null;
+}
+
+function play() {
+    if (frameId) {
+        return;
+    }
+    prevDraw = performance.now();
+    frameId = requestAnimationFrame(animate);
+}
+
+function step() {
+    split(quadHeap[0]);
+    render();
+}
+
 var img = new Image();
-img.addEventListener('load', imageToCanvas);
+img.addEventListener('load', reset);
 img.src = 'image.png';  // default image
 
 function readImage() {
@@ -265,8 +255,8 @@ function readImage() {
 var input = document.querySelector('#fileInput');
 input.addEventListener('change', readImage);
 
+// to test drawing speed
 function timeFillRect(r, g, b) {
-    // to test drawing speed
     var start = performance.now();
     var id = context.createImageData(1, 1);
     var d = id.data;
