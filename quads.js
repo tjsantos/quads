@@ -30,7 +30,7 @@ function Quad(dx, dy, dw, dh, depth) {
 Quad.prototype.draw = function() {
     context.fillStyle = this.color;
     context.fillRect(this.dx, this.dy, this.dw, this.dh);
-    context.strokeRect(this.dx, this.dy, this.dw, this.dh);
+    //context.strokeRect(this.dx, this.dy, this.dw, this.dh);
 };
 
 function IntegralImage(imageData) {
@@ -312,3 +312,8 @@ function timeFillRect(r, g, b) {
     var end = performance.now();
     console.log(start, end, end - start);
 }
+
+document.querySelector('#play').addEventListener('click', play);
+document.querySelector('#pause').addEventListener('click', pause);
+document.querySelector('#step').addEventListener('click', step);
+document.querySelector('#reset').addEventListener('click', reset);
