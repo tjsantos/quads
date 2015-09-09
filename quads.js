@@ -6,7 +6,6 @@ if (document.readyState != 'loading') {
     document.addEventListener("DOMContentLoaded", init);
 }
 */
-
 var canvas = document.querySelector('#canvas');
 var context = canvas.getContext('2d');
 
@@ -16,15 +15,22 @@ function Quad(dx, dy, dw, dh, depth) {
     this.dw = dw;
     this.dh = dh;
     this.depth = depth;
-    this.isLeaf = (this.dw <= 2 || this.dh <= 2);
-    this.meanRGB = integralImage.meanRGB(dx, dy, dw, dh);
+
+    var meanRGB = integralImage.meanRGB(dx, dy, dw, dh);
+    var r = Math.round(meanRGB[0]);
+    var g = Math.round(meanRGB[1]);
+    var b = Math.round(meanRGB[2]);
+    this.color = 'rgb(' + r + ',' + g + ',' + b + ')';
+
     var varRGB = integralImage.varRGB(dx, dy, dw, dh);
     this.priority = dw * dh * varRGB.reduce(function(a, b) { return a + b; });
+    this.isLeaf = (dw <= 4 || dh <= 4 || this.priority === 0);
+    this.id = id++;
 }
 Quad.prototype.draw = function() {
-    context.fillStyle = 'rgb(' + a.meanRGB.join(',') + ')';
-    context.fillRect(a.dx, a.dy, a.dw, a.dh);
-    context.strokeRect(a.dx, a.dy, a.dw, a.dh);
+    context.fillStyle = this.color;
+    context.fillRect(this.dx, this.dy, this.dw, this.dh);
+    context.strokeRect(this.dx, this.dy, this.dw, this.dh);
 };
 
 function IntegralImage(imageData) {
@@ -61,7 +67,7 @@ IntegralImage.prototype._sumRGB2 = function(dx, dy, dw, dh) {
 IntegralImage.prototype.meanRGB = function(dx, dy, dw, dh) {
     var n = dw * dh;
     return this._sumRGB(dx, dy, dw, dh).map(function(x) {
-        return Math.round(x/n);
+        return x/n;
     });
 };
 IntegralImage.prototype.varRGB = function(dx, dy, dw, dh) {
@@ -77,46 +83,78 @@ IntegralImage.prototype.varRGB = function(dx, dy, dw, dh) {
     return result;
 };
 
-function Heapq(cmp) {
+function Heapq(cmp, id) {
     if (typeof cmp !== 'function') {
         throw new TypeError('expected comparison function');
     }
+    if (typeof id !== 'function') {
+        throw new TypeError('expected id function');
+    }
 
     this.cmp = cmp;
+    this.id = id;
+    this.heap = [];
+    this.heapIndex = {};
 }
-Heapq.prototype.heapify = function(arr) {
-    var n = arr.length;
-    for (var i = n - 1; i >= 0; i--) {
-        this._bubbleDown(arr, i);
+Heapq.prototype.contains = function(item) {
+    return this.heapIndex.hasOwnProperty(this.id(item));
+};
+Heapq.prototype.peek = function() {
+    if (this.heap.length === 0) throw new Error('heap is empty');
+    return this.heap[0];
+};
+Heapq.prototype.heappush = function(item) {
+    if (this.contains(item)) {
+        throw new Error('item already in heap');
     }
-};
-Heapq.prototype.heappush = function(heap, item) {
+    var heap = this.heap;
     heap.push(item);
-    this._bubbleUp(heap, heap.length - 1);
+    this.heapIndex[this.id(item)] = heap.length - 1;
+    this._bubbleUp(heap.length - 1);
 };
-Heapq.prototype.heappop = function(heap) {
+Heapq.prototype.heappop = function(item) {
+    var heap = this.heap;
     if (heap.length === 0) {
         throw new Error('heap is empty');
     }
-
-    var result = heap[0];
-    heap[0] = heap[heap.length - 1];
-    heap.pop();
-    this._bubbleDown(heap, 0);
+    item = item || this.peek();  // default to min item in heap
+    if (!this.contains(item)) {
+        throw new Error('item is not in heap');
+    }
+    // exchange item with last item in heap array, then remove it
+    var i = this.heapIndex[this.id(item)];
+    this._exchange(i, heap.length - 1);
+    var result = heap.pop();
+    delete this.heapIndex[this.id(item)];
+    // restore heap invariant
+    this._bubbleUp(i);
+    this._bubbleDown(i);
 
     return result;
 };
-Heapq.prototype._bubbleUp = function(heap, i) {
+Heapq.prototype.clear = function() {
+    this.heap = [];
+    this.heapIndex = {};
+};
+Heapq.prototype._exchange = function(i, j) {
+    var heap = this.heap;
+    var tmp = heap[i];
+    heap[i] = heap[j];
+    heap[j] = tmp;
+    this.heapIndex[this.id(heap[i])] = i;
+    this.heapIndex[this.id(heap[j])] = j;
+};
+Heapq.prototype._bubbleUp = function(i) {
+    var heap = this.heap;
     var parent = Math.floor((i - 1)/2);
     while (parent >= 0 && this.cmp(heap[i], heap[parent]) < 0) {
-        var tmp = heap[parent];
-        heap[parent] = heap[i];
-        heap[i] = tmp;
+        this._exchange(i, parent);
         i = parent;
         parent = Math.floor((i - 1)/2);
     }
 };
-Heapq.prototype._bubbleDown = function(heap, i) {
+Heapq.prototype._bubbleDown = function(i) {
+    var heap = this.heap;
     var n = heap.length;
     while (true) {
         // determine minimum element among current (i) and two children
@@ -134,29 +172,25 @@ Heapq.prototype._bubbleDown = function(heap, i) {
         if (min === i) {
             break;
         } else {
-            var tmp = heap[i];
-            heap[i] = heap[min];
-            heap[min] = tmp;
+            this._exchange(i, min);
             i = min;
         }
     }
 };
 
-var heapq = new Heapq(function cmp(a, b) {
+var quadHeap = new Heapq(function cmp(a, b) {
     // leaves have least priority
     if (a.isLeaf) return (b.isLeaf ? 0 : 1);
     else if (b.isLeaf) return (a.isLeaf ? 0 : -1);
     else return (b.priority - a.priority);
-}, function key(item) {
+}, function id(item) {
     return item.id;
 });
 
-var maxIters = 10000;
 var prevDraw;
 var itersPerSec = 10;
 var timestamps = [];  // to debug slow frames
 var integralImage;
-var quadHeap;
 var frameId;
 var toDraw = [];
 var id = 0;
@@ -165,7 +199,7 @@ function split(quad) {
     if (quad.isLeaf) {
         throw new TypeError('quad is a leaf -- cannot split');
     }
-    heapq.heappop(quadHeap, quad.heapIndex);
+    quadHeap.heappop(quad);
     var w1 = Math.ceil(quad.dw / 2);
     var w2 = quad.dw - w1;
     var h1 = Math.ceil(quad.dh / 2);
@@ -180,7 +214,7 @@ function split(quad) {
 
     children.forEach(function(quad) {
         toDraw.push(quad);
-        heapq.heappush(quadHeap, quad);
+        quadHeap.heappush(quad);
     });
 }
 
@@ -192,15 +226,16 @@ function render() {
 }
 
 function animate(timestamp) {
-    if (quadHeap[0].isLeaf) {
+    if (quadHeap.peek().isLeaf) {
+        console.log('done');
         return;
     }
     timestamps.push(timestamp);
     var iters = itersPerSec*(timestamp - prevDraw)/1000;
     if (iters >= 1) {
         prevDraw = timestamp;
-        for (var i = 0; i < iters; i++) {
-            split(quadHeap[0]);
+        for (var i = 0; i < iters && !quadHeap.peek().isLeaf; i++) {
+            split(quadHeap.peek());
         }
         render();
     }
@@ -213,9 +248,10 @@ function reset() {
     canvas.width = img.width;
     canvas.height = img.height;
     context.drawImage(img, 0, 0);
-    quadHeap = [new Quad(0, 0, canvas.width, canvas.height, 0)];
     var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     integralImage = new IntegralImage(imageData);
+    quadHeap.clear();
+    quadHeap.heappush(new Quad(0, 0, canvas.width, canvas.height, 0));
 }
 
 function pause() {
@@ -236,7 +272,7 @@ function play() {
 }
 
 function step() {
-    split(quadHeap[0]);
+    split(quadHeap.peek());
     render();
 }
 
