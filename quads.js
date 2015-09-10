@@ -13,9 +13,9 @@ var quadHeap = new Heapq(function cmp(a, b) {
 var prevDraw;
 var itersPerSec = 10;
 var timestamps = [];  // to debug slow frames
+var skippedFrames = 0;
 var integralImage;
 var frameId;
-var toDraw = [];
 var id = 0;
 
 function split(quad) {
@@ -36,16 +36,20 @@ function split(quad) {
     ];
 
     children.forEach(function(quad) {
-        toDraw.push(quad);
         quadHeap.heappush(quad);
+    });
+
+    children.forEach(function(quad) {
+        quad.draw();
     });
 }
 
 function render() {
-    toDraw.forEach(function(quad) {
-        quad.draw();
-    });
-    toDraw = [];
+    // info external to quadTree
+    var textInfo = (quadHeap.heap.length - 1)/3 + ' iters';
+    textInfo += ', ' + skippedFrames + ' skipped frames (60 FPS)';
+    document.querySelector('#info')
+        .textContent = textInfo;
 }
 
 function animate(timestamp) {
@@ -53,16 +57,21 @@ function animate(timestamp) {
         console.log('done');
         return;
     }
+    // log skipped frames
+    var interval = timestamp - timestamps[timestamps.length - 1];
+    var frames = Math.round(interval*60/1000);
+    if (frames > 1) skippedFrames += frames - 1;
     timestamps.push(timestamp);
+
+    // split and draw elements at given speed
     var iters = itersPerSec*(timestamp - prevDraw)/1000;
     if (iters >= 1) {
         prevDraw = timestamp;
         for (var i = 0; i < iters && !quadHeap.peek().isLeaf; i++) {
             split(quadHeap.peek());
         }
-        render();
     }
-
+    render();
     frameId = requestAnimationFrame(animate);
 }
 
@@ -75,15 +84,22 @@ function reset() {
     integralImage = new IntegralImage(imageData);
     quadHeap.clear();
     quadHeap.heappush(new Quad(0, 0, canvas.width, canvas.height, 0));
+    quadHeap.heap.forEach(function(quad) {
+        quad.draw();
+    });
+    skippedFrames = 0;
+    render();
 }
 
 function pause() {
     if (!frameId) {
+        // note that id from requestAnimationFrame() is a non-zero value
         return;
     }
     cancelAnimationFrame(frameId);
     frameId = null;
     prevDraw = null;
+    render();
 }
 
 function play() {
@@ -91,6 +107,7 @@ function play() {
         return;
     }
     prevDraw = performance.now();
+    timestamps.push(performance.now());
     frameId = requestAnimationFrame(animate);
 }
 
