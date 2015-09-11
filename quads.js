@@ -35,11 +35,14 @@ function animate(timestamp) {
     // split and draw elements at given speed
     var iters = itersPerSec*(timestamp - prevDraw)/1000;
     if (iters >= 1) {
-        prevDraw = timestamp;
+        var remainder = (iters - Math.floor(iters)) * 1000/itersPerSec;
+        prevDraw = timestamp - remainder;
+        iters = Math.floor(iters);
         for (var i = 0; i < iters && !quadTree.done(); i++) {
             quadTree.splitNext();
         }
     }
+
     render();
     frameId = requestAnimationFrame(animate);
 }
@@ -53,7 +56,7 @@ function reset() {
 
 function pause() {
     if (!frameId) {
-        // note that id from requestAnimationFrame() is a non-zero value
+        // note that requestAnimationFrame() gives non-zero id -> Boolean true
         return;
     }
     cancelAnimationFrame(frameId);
@@ -80,7 +83,14 @@ function prepQuads() {
     canvas.width = img.width;
     canvas.height = img.height;
     context.drawImage(img, 0, 0);
-    quadTree = new QuadTree(context);
+    // show loading text while constructing quadtree
+    requestAnimationFrame(function() {
+        document.querySelector('#info').textContent = 'loading...';
+        requestAnimationFrame(function() {
+            quadTree = new QuadTree(context);
+            reset();
+        });
+    });
 }
 
 var img = new Image();
@@ -88,6 +98,9 @@ img.addEventListener('load', prepQuads);
 img.src = 'image.png';  // default image
 
 function readImage() {
+    if (this.files.length === 0) {
+        return;
+    }
     var file = this.files[0];
     var reader = new FileReader();
     reader.addEventListener('load', function(e) {
