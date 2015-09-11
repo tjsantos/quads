@@ -7,40 +7,130 @@ var Quad = (function() {
         this.dw = dw;
         this.dh = dh;
         this.depth = depth;
-
-        var meanRGB = integralImage.meanRGB(dx, dy, dw, dh);
-        var r = Math.round(meanRGB[0]);
-        var g = Math.round(meanRGB[1]);
-        var b = Math.round(meanRGB[2]);
-        this.color = 'rgb(' + r + ',' + g + ',' + b + ')';
-
-        this.priority = -this.calculateError();
-        this.isLeaf = (dw <= 4 || dh <= 4 || this.priority === 0);
         this.id = id++;
     }
-
-    Quad.prototype.draw = function () {
-        context.fillStyle = this.color;
-        context.fillRect(this.dx, this.dy, this.dw, this.dh);
-        //context.strokeRect(this.dx, this.dy, this.dw, this.dh);
-    };
-    Quad.prototype.calculateError = function () {
-        // convert color space? rgb calculation doesn't match human perception...
-        var varRGB = integralImage.varRGB(this.dx, this.dy, this.dw, this.dh);
-        var re = Math.sqrt(varRGB[0]);
-        var ge = Math.sqrt(varRGB[1]);
-        var be = Math.sqrt(varRGB[2]);
-        // weighted average by luminance (grayscale)
-        var error = 0.299 * re + 0.587 * ge + 0.114 * be;
-        var area = this.dw * this.dh;
-        return Math.pow(area, 0.25) * error;
-    };
+    var id = 0;
 
     return Quad;
 })();
 
+var QuadTree = (function() {
+
+    function QuadTree(context) {
+        if (!(context instanceof CanvasRenderingContext2D)) {
+            throw new TypeError('expected CanvasRenderingContext2D');
+        }
+        var timer = performance.now();
+
+        var imageData = context.getImageData(0, 0, context.canvas.width, context.canvas.height);
+        this.integralImage = new IntegralImage(imageData);
+        this.context = context;
+
+        var qt = this;
+        this.quadHeap = new Heapq(function cmp(a, b) {
+            // leaves have least priority
+            if (qt.isLeaf(a)) return (qt.isLeaf(b) ? 0 : 1);
+            else if (qt.isLeaf(b)) return (qt.isLeaf(a) ? 0 : -1);
+            else return (qt.priority(a) - qt.priority(b));
+        }, function id(item) {
+            return item.id;
+        });
+
+        this.reset();
+        //while (!this.done()) {
+        //    this.splitNext();
+        //}
+
+        console.log(performance.now() - timer + 'ms QuadTree construction');
+    }
+
+    // area power, draw style, max depth, ...
+    //QuadTree.prototype.options;
+    QuadTree.prototype.size = function() {
+        return this.quadHeap.size();
+    };
+    QuadTree.prototype.done = function() {
+        return this.isLeaf(this.quadHeap.peek());
+    };
+    QuadTree.prototype.isLeaf = function(quad) {
+        return quad.dw <= 4 || quad.dh <= 4 || this.priority(quad) === 0;
+    };
+    QuadTree.prototype.reset = function() {
+        this.quadHeap.clear();
+        var x = 0;
+        var y = 0;
+        var depth = 0;
+        var width = this.context.canvas.width;
+        var height = this.context.canvas.height;
+        this.quadHeap.heappush(new Quad(x, y, width, height, depth));
+        this.drawQuad(this.quadHeap.peek());
+    };
+    QuadTree.prototype.splitQuad = function(quad){
+        if (this.isLeaf(quad)) {
+            console.log('cannot split quad leaf');
+            return;
+        }
+        this.quadHeap.heappop(quad);
+        var w1 = Math.ceil(quad.dw / 2);
+        var w2 = quad.dw - w1;
+        var h1 = Math.ceil(quad.dh / 2);
+        var h2 = quad.dh - h1;
+        var newDepth = quad.depth + 1;
+        var children = [
+            new Quad(     quad.dx,      quad.dy, w1, h1, newDepth),
+            new Quad(quad.dx + w1,      quad.dy, w2, h1, newDepth),
+            new Quad(     quad.dx, quad.dy + h1, w1, h2, newDepth),
+            new Quad(quad.dx + w1, quad.dy + h1, w2, h2, newDepth)
+        ];
+
+        var qt = this;
+        children.forEach(function(quad) {
+            qt.quadHeap.heappush(quad);
+            qt.drawQuad(quad);
+        });
+    };
+    QuadTree.prototype.splitNext = function() {
+        if (this.done()) {
+            console.log('quadtree is done');
+            return;
+        }
+        this.splitQuad(this.quadHeap.peek());
+    };
+    //QuadTree.prototype.findQuad = function(x, y){};
+    //QuadTree.prototype.splitCoord = function(x, y){};
+    QuadTree.prototype.drawQuad = function(quad){
+        var meanRGB = this.integralImage.meanRGB(quad.dx, quad.dy, quad.dw, quad.dh);
+        var r = Math.round(meanRGB[0]);
+        var g = Math.round(meanRGB[1]);
+        var b = Math.round(meanRGB[2]);
+        var color = 'rgb(' + r + ',' + g + ',' + b + ')';
+
+        context.fillStyle = color;
+        context.fillRect(quad.dx, quad.dy, quad.dw, quad.dh);
+        //context.strokeRect(this.dx, this.dy, this.dw, this.dh);
+    };
+    QuadTree.prototype.priority = function(quad) {
+        if (!quad.priority) {
+            // convert color space? rgb calculation doesn't match human perception...
+            var varRGB = this.integralImage.varRGB(quad.dx, quad.dy, quad.dw, quad.dh);
+            var re = Math.sqrt(varRGB[0]);
+            var ge = Math.sqrt(varRGB[1]);
+            var be = Math.sqrt(varRGB[2]);
+            // weighted average by luminance (grayscale)
+            var error = 0.299 * re + 0.587 * ge + 0.114 * be;
+            var area = quad.dw * quad.dh;
+            quad.priority = -1 * Math.pow(area, 0.25) * error;
+        }
+        return quad.priority;
+    };
+    //QuadTree.prototype.redraw;
+
+    return QuadTree;
+})();
+
 var IntegralImage = (function() {
 
+    // TODO convert colorspace?
     function IntegralImage(imageData) {
         this.imageData = imageData;
     }
@@ -111,6 +201,9 @@ var Heapq = (function() {
         this.heapIndex = {};
     }
 
+    Heapq.prototype.size = function() {
+        return this.heap.length;
+    };
     Heapq.prototype.contains = function (item) {
         return this.heapIndex.hasOwnProperty(this.id(item));
     };
