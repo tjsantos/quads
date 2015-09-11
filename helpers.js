@@ -8,6 +8,11 @@ var Quad = (function() {
         this.dh = dh;
         this.depth = depth;
         this.id = id++;
+        // children nodes
+        this.NW = null;
+        this.NE = null;
+        this.SW = null;
+        this.SE = null;
     }
     var id = 0;
 
@@ -26,22 +31,38 @@ var QuadTree = (function() {
         this.integralImage = new IntegralImage(imageData);
         this.context = context;
 
+        this._priority = {};  // cache of priority values
         var qt = this;
         this.quadHeap = new Heapq(function cmp(a, b) {
-            // leaves have least priority
-            if (qt.isLeaf(a)) return (qt.isLeaf(b) ? 0 : 1);
-            else if (qt.isLeaf(b)) return (qt.isLeaf(a) ? 0 : -1);
-            else return (qt.priority(a) - qt.priority(b));
+            return qt.priority(a) - qt.priority(b);
         }, function id(item) {
             return item.id;
         });
 
+        var x = 0;
+        var y = 0;
+        var depth = 0;
+        var width = this.context.canvas.width;
+        var height = this.context.canvas.height;
+        this.root = new Quad(x, y, width, height, depth);
+        // build tree
+        var n = 0;
+        (function build(quad) {
+            if (qt.isLeaf(quad)) {
+                return;
+            }
+            n += 1;
+            qt.prepSplit(quad);
+            build(quad.NW);
+            build(quad.NE);
+            build(quad.SW);
+            build(quad.SE);
+        })(this.root);
+
         this.reset();
-        //while (!this.done()) {
-        //    this.splitNext();
-        //}
 
         console.log(performance.now() - timer + 'ms QuadTree construction');
+        console.log('tree size:', n);
     }
 
     // area power, draw style, max depth, ...
@@ -53,41 +74,47 @@ var QuadTree = (function() {
         return this.isLeaf(this.quadHeap.peek());
     };
     QuadTree.prototype.isLeaf = function(quad) {
-        return quad.dw <= 4 || quad.dh <= 4 || this.priority(quad) === 0;
+        return this.priority(quad) === 0;
     };
     QuadTree.prototype.reset = function() {
         this.quadHeap.clear();
-        var x = 0;
-        var y = 0;
-        var depth = 0;
-        var width = this.context.canvas.width;
-        var height = this.context.canvas.height;
-        this.quadHeap.heappush(new Quad(x, y, width, height, depth));
-        this.drawQuad(this.quadHeap.peek());
+        this.quadHeap.heappush(this.root);
+        this.drawQuad(this.root);
+    };
+    QuadTree.prototype.prepSplit = function(quad) {
+        if (this.isLeaf(quad)) {
+            console.log('cannot split quad leaf');
+            return;
+        }
+        if (quad.NW) {
+            return;
+        }
+        var w1 = Math.ceil(quad.dw / 2);
+        var w2 = quad.dw - w1;
+        var h1 = Math.ceil(quad.dh / 2);
+        var h2 = quad.dh - h1;
+        var newDepth = quad.depth + 1;
+        quad.NW = new Quad(quad.dx, quad.dy, w1, h1, newDepth);
+        quad.NE = new Quad(quad.dx + w1, quad.dy, w2, h1, newDepth);
+        quad.SW = new Quad(quad.dx, quad.dy + h1, w1, h2, newDepth);
+        quad.SE = new Quad(quad.dx + w1, quad.dy + h1, w2, h2, newDepth);
     };
     QuadTree.prototype.splitQuad = function(quad){
         if (this.isLeaf(quad)) {
             console.log('cannot split quad leaf');
             return;
         }
-        this.quadHeap.heappop(quad);
-        var w1 = Math.ceil(quad.dw / 2);
-        var w2 = quad.dw - w1;
-        var h1 = Math.ceil(quad.dh / 2);
-        var h2 = quad.dh - h1;
-        var newDepth = quad.depth + 1;
-        var children = [
-            new Quad(     quad.dx,      quad.dy, w1, h1, newDepth),
-            new Quad(quad.dx + w1,      quad.dy, w2, h1, newDepth),
-            new Quad(     quad.dx, quad.dy + h1, w1, h2, newDepth),
-            new Quad(quad.dx + w1, quad.dy + h1, w2, h2, newDepth)
-        ];
-
-        var qt = this;
-        children.forEach(function(quad) {
-            qt.quadHeap.heappush(quad);
-            qt.drawQuad(quad);
-        });
+        var heap = this.quadHeap;
+        heap.heappop(quad);
+        this.prepSplit(quad);
+        heap.heappush(quad.NW);
+        heap.heappush(quad.NE);
+        heap.heappush(quad.SW);
+        heap.heappush(quad.SE);
+        this.drawQuad(quad.NW);
+        this.drawQuad(quad.NE);
+        this.drawQuad(quad.SW);
+        this.drawQuad(quad.SE);
     };
     QuadTree.prototype.splitNext = function() {
         if (this.done()) {
@@ -103,25 +130,36 @@ var QuadTree = (function() {
         var r = Math.round(meanRGB[0]);
         var g = Math.round(meanRGB[1]);
         var b = Math.round(meanRGB[2]);
-        var color = 'rgb(' + r + ',' + g + ',' + b + ')';
 
-        context.fillStyle = color;
+        context.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
         context.fillRect(quad.dx, quad.dy, quad.dw, quad.dh);
         //context.strokeRect(this.dx, this.dy, this.dw, this.dh);
     };
     QuadTree.prototype.priority = function(quad) {
-        if (!quad.priority) {
-            // convert color space? rgb calculation doesn't match human perception...
-            var varRGB = this.integralImage.varRGB(quad.dx, quad.dy, quad.dw, quad.dh);
-            var re = Math.sqrt(varRGB[0]);
-            var ge = Math.sqrt(varRGB[1]);
-            var be = Math.sqrt(varRGB[2]);
-            // weighted average by luminance (grayscale)
-            var error = 0.299 * re + 0.587 * ge + 0.114 * be;
-            var area = quad.dw * quad.dh;
-            quad.priority = -1 * Math.pow(area, 0.25) * error;
+        if (!this._priority.hasOwnProperty(quad.id)) {
+            var minWidth = 2;
+            var minHeight = 2;
+            var isMinSize = function(quad) {
+                return (Math.floor(quad.dw/2) < minWidth || Math.floor(quad.dh/2) < minHeight)
+            };
+
+            // leaves have least priority (0)
+            // leaves are either of min size or have 0 error
+            if (isMinSize(quad)) {
+                this._priority[quad.id] = 0;
+            } else {
+                // TODO convert color space? rgb calculation doesn't match human perception...
+                var varRGB = this.integralImage.varRGB(quad.dx, quad.dy, quad.dw, quad.dh);
+                var re = Math.sqrt(varRGB[0]);
+                var ge = Math.sqrt(varRGB[1]);
+                var be = Math.sqrt(varRGB[2]);
+                // weighted average by luminance (grayscale)
+                var error = 0.299 * re + 0.587 * ge + 0.114 * be;
+                var area = quad.dw * quad.dh;
+                this._priority[quad.id] = -1 * Math.pow(area, 0.25) * error;
+            }
         }
-        return quad.priority;
+        return this._priority[quad.id];
     };
     //QuadTree.prototype.redraw;
 
