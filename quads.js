@@ -1,4 +1,21 @@
 
+/*
+ TODO
+ - split on click
+ - split on hold
+ - jump to iteration
+ - breadth first search
+ - use react?
+ - options: area power, draw style, speed (by iters, area, error, or priority)
+ - leaf size vs max depth
+ - color space ?
+ - improve initial load speed?
+    - integral image - summed area table
+ - es6
+ - gulp
+ - transitions, animating opacity
+  */
+
 var canvas = document.querySelector('#canvas');
 var context = canvas.getContext('2d');
 
@@ -110,28 +127,6 @@ function readImage() {
 }
 var input = document.querySelector('#fileInput');
 input.addEventListener('change', readImage);
-
-// to test drawing speed
-function timeFillRect(r, g, b) {
-    var start = performance.now();
-    var id = context.createImageData(1, 1);
-    var d = id.data;
-    for (var x = 0; x < canvas.width; x++) {
-        for (var y = 0; y < canvas.height; y++) {
-            /*
-            d[0] = r;
-            d[1] = g;
-            d[2] = b;
-            d[3] = 255;
-            context.putImageData(id, x, y);
-            */
-            context.fillStyle = 'rgb(' + [r,g,b].join(',') + ')';
-            context.fillRect(x, y, 1, 1);
-        }
-    }
-    var end = performance.now();
-    console.log(start, end, end - start);
-}
 
 document.querySelector('#play').addEventListener('click', play);
 document.querySelector('#pause').addEventListener('click', pause);

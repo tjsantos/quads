@@ -45,7 +45,7 @@ var QuadTree = (function() {
         var width = this.context.canvas.width;
         var height = this.context.canvas.height;
         this.root = new Quad(x, y, width, height, depth);
-        // build tree
+        // prep tree
         var n = 0;
         (function build(quad) {
             if (qt.isLeaf(quad)) {
@@ -148,7 +148,6 @@ var QuadTree = (function() {
             if (isMinSize(quad)) {
                 this._priority[quad.id] = 0;
             } else {
-                // TODO convert color space? rgb calculation doesn't match human perception...
                 var varRGB = this.integralImage.varRGB(quad.dx, quad.dy, quad.dw, quad.dh);
                 var re = Math.sqrt(varRGB[0]);
                 var ge = Math.sqrt(varRGB[1]);
@@ -168,7 +167,6 @@ var QuadTree = (function() {
 
 var IntegralImage = (function() {
 
-    // TODO convert colorspace?
     function IntegralImage(imageData) {
         this.imageData = imageData;
     }
