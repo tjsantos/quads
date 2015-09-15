@@ -1,7 +1,6 @@
 
 /*
  TODO
- - split on click
  - split on hold
  - jump to iteration
  - breadth first search
@@ -138,3 +137,33 @@ document.querySelector('#download')
         link.href = canvas.toDataURL();
         link.download = "quads.png";
     });
+
+function getCanvasXY(event) {
+    // x y coords from click event, relative to canvas
+    var rect = event.target.getBoundingClientRect();
+    var style = window.getComputedStyle(event.target);
+    var borderLeft = parseInt(style.getPropertyValue('border-left-width'));
+    var borderTop = parseInt(style.getPropertyValue('border-top-width'));
+    var borderRight = parseInt(style.getPropertyValue('border-right-width'));
+    var borderBottom = parseInt(style.getPropertyValue('border-bottom-width'));
+    var paddingLeft = parseInt(style.getPropertyValue('padding-left'));
+    var paddingTop = parseInt(style.getPropertyValue('padding-top'));
+    var paddingRight = parseInt(style.getPropertyValue('padding-right'));
+    var paddingBottom = parseInt(style.getPropertyValue('padding-bottom'));
+
+    var scaledX = event.clientX - (rect.left + borderLeft + paddingLeft);
+    var scaledY = event.clientY - (rect.top + borderTop + paddingTop);
+    var scaledWidth = rect.width - (borderLeft + paddingLeft + borderRight + paddingRight);
+    var scaledHeight = rect.height - (borderTop + paddingTop + borderBottom + paddingBottom);
+    return {
+        'x': scaledX * canvas.width / scaledWidth,
+        'y': scaledY * canvas.height / scaledHeight
+    };
+}
+
+function splitClickedQuad(event) {
+    var coords = getCanvasXY(event);
+    quadTree.splitCoord(coords.x, coords.y);
+    render();
+}
+canvas.addEventListener('click', splitClickedQuad);

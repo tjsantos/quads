@@ -82,6 +82,7 @@ var QuadTree = (function() {
         this.drawQuad(this.root);
     };
     QuadTree.prototype.prepSplit = function(quad) {
+        // TODO refactor prepSplit() code into getChildren()
         if (this.isLeaf(quad)) {
             console.log('cannot split quad leaf');
             return;
@@ -123,8 +124,35 @@ var QuadTree = (function() {
         }
         this.splitQuad(this.quadHeap.peek());
     };
-    //QuadTree.prototype.findQuad = function(x, y){};
-    //QuadTree.prototype.splitCoord = function(x, y){};
+    QuadTree.prototype.findQuad = function(x, y, quad){
+        quad = quad || this.root;
+        //console.log(quad.dx, quad.dy, quad.dw, quad.dh, quad.depth);
+        // check if x,y in quad
+        if (x < quad.dx || x >= quad.dx + quad.dw
+            || y < quad.dy || y >= quad.dy + quad.dh) {
+            return null;
+        }
+        // if x,y in active/drawn quads
+        if (this.quadHeap.contains(quad)) {
+            return quad;
+        }
+        // recursively search children
+        return (this.findQuad(x, y, quad.NW)
+                || this.findQuad(x, y, quad.NE)
+                || this.findQuad(x, y, quad.SW)
+                || this.findQuad(x, y, quad.SE));
+    };
+    QuadTree.prototype.splitCoord = function(x, y){
+        console.log('split', x, y);
+        var quad = this.findQuad(x, y);
+        if (!quad) {
+            console.log('quad not found:', x, y);
+        } else if (this.isLeaf(quad)) {
+            //console.log("can't split leaf at", x, y);
+        } else {
+            this.splitQuad(quad);
+        }
+    };
     QuadTree.prototype.drawQuad = function(quad){
         var meanRGB = this.integralImage.meanRGB(quad.dx, quad.dy, quad.dw, quad.dh);
         var r = Math.round(meanRGB[0]);
@@ -271,8 +299,10 @@ var Heapq = (function() {
         var result = heap.pop();
         delete this.heapIndex[this.id(item)];
         // restore heap invariant
-        this._bubbleUp(i);
-        this._bubbleDown(i);
+        if (i < heap.length) {
+            this._bubbleUp(i);
+            this._bubbleDown(i);
+        }
 
         return result;
     };
