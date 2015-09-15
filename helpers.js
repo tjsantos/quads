@@ -124,12 +124,14 @@ var QuadTree = (function() {
         }
         this.splitQuad(this.quadHeap.peek());
     };
-    QuadTree.prototype.findQuad = function(x, y, quad){
-        quad = quad || this.root;
+    QuadTree.prototype.findQuad = function(x, y){
+        return this._findQuad(x, y, this.root);
+    };
+    QuadTree.prototype._findQuad = function(x, y, quad){
         //console.log(quad.dx, quad.dy, quad.dw, quad.dh, quad.depth);
         // check if x,y in quad
-        if (x < quad.dx || x >= quad.dx + quad.dw
-            || y < quad.dy || y >= quad.dy + quad.dh) {
+        if (!quad || x < quad.dx || x >= quad.dx + quad.dw
+                || y < quad.dy || y >= quad.dy + quad.dh) {
             return null;
         }
         // if x,y in active/drawn quads
@@ -137,10 +139,10 @@ var QuadTree = (function() {
             return quad;
         }
         // recursively search children
-        return (this.findQuad(x, y, quad.NW)
-                || this.findQuad(x, y, quad.NE)
-                || this.findQuad(x, y, quad.SW)
-                || this.findQuad(x, y, quad.SE));
+        return (this._findQuad(x, y, quad.NW)
+            || this._findQuad(x, y, quad.NE)
+            || this._findQuad(x, y, quad.SW)
+            || this._findQuad(x, y, quad.SE));
     };
     QuadTree.prototype.splitCoord = function(x, y){
         console.log('split', x, y);
