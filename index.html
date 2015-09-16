@@ -27,10 +27,13 @@
 <fieldset id="controls">
     <legend>controls</legend>
 
-    <p>
-        <label for="fileInput">image</label>
-        <input id="fileInput" type="file" accept="image/*">
-    </p>
+    <label for="fileInput">image</label>
+    <input id="fileInput" type="file" accept="image/*">
+
+
+    <label for="speed">speed:</label>
+    <input id="speed" type="range" min="1">
+    <output id="speedOutput" for="speed"></output><span> iters per sec</span>
 
     <p>
         <button id="play" type="button">play</button>
@@ -47,10 +50,7 @@
         <label><input type="radio" name="process">incremental</label>
         <label><input type="radio" name="process">layered</label>
     </p>
-    <p>
-        <label for="speed">speed</label>
-        <input id="speed" type="range">
-    </p>
+
 
     <p>
         <label for="threshold">threshold</label>

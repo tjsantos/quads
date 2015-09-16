@@ -4,7 +4,7 @@
  - jump to iteration
  - breadth first search
  - use react?
- - options: area power, draw style, speed (by iters, area, error, or priority)
+ - options: area power, draw style, speed by area or error/priority
  - leaf size vs max depth
  - color space ?
  - improve initial load speed?
@@ -18,7 +18,7 @@ var canvas = document.querySelector('#canvas');
 var context = canvas.getContext('2d');
 
 var prevDraw;
-var itersPerSec = 15;
+var itersPerSec = 20;
 var drawTimes = [];  // to debug slow frames
 var skippedFrames = 0;
 var frameId;
@@ -143,6 +143,14 @@ document.querySelector('#download')
         link.href = canvas.toDataURL();
         link.download = "quads.png";
     });
+
+document.querySelector('#speed')
+    .addEventListener('input', function(e) {
+        document.querySelector('#speedOutput').value = this.value;
+        itersPerSec = this.value;
+    });
+document.querySelector('#speed').value = itersPerSec;
+document.querySelector('#speedOutput').value = itersPerSec;
 
 function getCanvasXY(event) {
     // x y coords from click event, relative to canvas
