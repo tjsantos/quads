@@ -1,7 +1,6 @@
 
 /*
  TODO
- - split on hold
  - jump to iteration
  - breadth first search
  - use react?
@@ -19,7 +18,7 @@ var canvas = document.querySelector('#canvas');
 var context = canvas.getContext('2d');
 
 var prevDraw;
-var itersPerSec = 10;
+var itersPerSec = 15;
 var timestamps = [];  // to debug slow frames
 var skippedFrames = 0;
 var frameId;
@@ -55,7 +54,11 @@ function animate(timestamp) {
         prevDraw = timestamp - remainder;
         iters = Math.floor(iters);
         for (var i = 0; i < iters && !quadTree.done(); i++) {
-            quadTree.splitNext();
+            if (mousedown) {
+                quadTree.splitCoord(coords.x, coords.y);
+            } else {
+                quadTree.splitNext();
+            }
         }
     }
 
@@ -96,6 +99,7 @@ function step() {
 }
 
 function prepQuads() {
+    pause();
     canvas.width = img.width;
     canvas.height = img.height;
     context.drawImage(img, 0, 0);
@@ -167,3 +171,30 @@ function splitClickedQuad(event) {
     render();
 }
 canvas.addEventListener('click', splitClickedQuad);
+// split on hold
+var mousedown = false;
+var coords = null;
+var wasPlaying = false;
+canvas.addEventListener('mousedown', function(e) {
+    wasPlaying = Boolean(frameId);
+    mousedown = true;
+    coords = getCanvasXY(e);
+    play();
+});
+canvas.addEventListener('mousemove', function(e) {
+    if (mousedown) {
+        coords = getCanvasXY(e);
+    }
+});
+// allow mouse to leave canvas while holding
+document.addEventListener('mouseup', function(e) {
+    if (mousedown) {
+        mousedown = false;
+        if (!wasPlaying) {
+            pause();
+        }
+    }
+});
+canvas.addEventListener('mouseleave', function(e) {
+    coords = {x:-1, y:-1};
+});

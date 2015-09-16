@@ -145,10 +145,10 @@ var QuadTree = (function() {
             || this._findQuad(x, y, quad.SE));
     };
     QuadTree.prototype.splitCoord = function(x, y){
-        console.log('split', x, y);
+        //console.log('split', x, y);
         var quad = this.findQuad(x, y);
         if (!quad) {
-            console.log('quad not found:', x, y);
+            //console.log('quad not found:', x, y);
         } else if (this.isLeaf(quad)) {
             //console.log("can't split leaf at", x, y);
         } else {
@@ -163,7 +163,8 @@ var QuadTree = (function() {
 
         context.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
         context.fillRect(quad.dx, quad.dy, quad.dw, quad.dh);
-        //context.strokeRect(this.dx, this.dy, this.dw, this.dh);
+        //context.lineWidth = 0.5;
+        //context.strokeRect(quad.dx, quad.dy, quad.dw, quad.dh);
     };
     QuadTree.prototype.priority = function(quad) {
         if (!this._priority.hasOwnProperty(quad.id)) {
