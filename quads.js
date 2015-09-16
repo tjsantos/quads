@@ -19,7 +19,7 @@ var context = canvas.getContext('2d');
 
 var prevDraw;
 var itersPerSec = 15;
-var timestamps = [];  // to debug slow frames
+var drawTimes = [];  // to debug slow frames
 var skippedFrames = 0;
 var frameId;
 var quadTree;
@@ -38,15 +38,7 @@ function animate(timestamp) {
         console.log('done');
         return;
     }
-    // log skipped frames
-    var interval = timestamp - timestamps[timestamps.length - 1];
-    var frames = Math.round(interval*60/1000);
-    if (frames > 2) {
-        skippedFrames += frames - 1;
-        console.log(interval + 'ms, ' + (frames - 1), 'skipped frames');
-    }
-    timestamps.push(timestamp);
-
+    // TODO refactor speed and and animation code into quadtree class?
     // split and draw elements at given speed
     var iters = itersPerSec*(timestamp - prevDraw)/1000;
     if (iters >= 1) {
@@ -60,9 +52,20 @@ function animate(timestamp) {
                 quadTree.splitNext();
             }
         }
-    }
 
+        // log skipped frames from quadtree
+        var interval = performance.now() - timestamp;
+        var frames = Math.round(interval*60/1000);
+        if (frames > 1) {
+            skippedFrames += frames - 1;
+            console.log('iter', (quadTree.size() - 1)/3,
+                        interval + 'ms,',
+                        (frames - 1), 'skipped frames');
+        }
+        drawTimes.push(interval);
+    }
     render();
+
     frameId = requestAnimationFrame(animate);
 }
 
@@ -89,7 +92,6 @@ function play() {
         return;
     }
     prevDraw = performance.now();
-    timestamps.push(performance.now());
     frameId = requestAnimationFrame(animate);
 }
 
