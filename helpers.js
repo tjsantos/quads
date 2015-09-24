@@ -47,8 +47,9 @@ var QuadTree = (function() {
         this.root = new Quad(x, y, width, height, depth);
         // prep tree
         var n = 0;
+        var preBuiltDepth = 5;
         (function build(quad) {
-            if (qt.isLeaf(quad)) {
+            if (qt.isLeaf(quad) || quad.depth > preBuiltDepth) {
                 return;
             }
             n += 1;
@@ -62,7 +63,7 @@ var QuadTree = (function() {
         this.reset();
 
         console.log(performance.now() - timer + 'ms QuadTree construction');
-        console.log('tree size:', n);
+        console.log('pre-built tree size:', n);
     }
 
     // area power, draw style, max depth, ...

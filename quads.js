@@ -127,8 +127,8 @@ document.querySelector('#speedOutput').value = itersPerSec;
         canvas.height = img.height;
         context.drawImage(img, 0, 0);
         // show loading text while constructing quadtree
+        document.querySelector('#info').textContent = 'loading...';
         requestAnimationFrame(function () {
-            document.querySelector('#info').textContent = 'loading...';
             requestAnimationFrame(function () {
                 quadTree = new QuadTree(context);
                 reset();
