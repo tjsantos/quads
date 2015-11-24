@@ -132,12 +132,13 @@ document.querySelector('#speedOutput').value = itersPerSec;
             requestAnimationFrame(function () {
                 quadTree = new QuadTree(context);
                 reset();
+                play();
             });
         });
     }
     var img = new Image();
     img.addEventListener('load', prepQuads);
-    img.src = 'image.png';  // default image
+    img.src = 'image.jpg';  // default image
 
     function readImage() {
         if (this.files.length === 0) {
